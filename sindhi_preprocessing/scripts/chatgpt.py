@@ -1,9 +1,9 @@
 # Arabic shaping / bidi for correct Arabic-script rendering
+from __future__ import annotations
 import arabic_reshaper
 from bidi.algorithm import get_display
 from matplotlib import font_manager
 from matplotlib.font_manager import FontProperties
-from __future__ import annotations
 import argparse
 import csv
 import os
