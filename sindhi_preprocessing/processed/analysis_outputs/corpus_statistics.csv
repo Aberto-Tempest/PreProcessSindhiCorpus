@@ -1,3 +1,0 @@
-corpus_name,    total_characters,      total_words, total_sentences,    unique_words,   avg_word_length,        avg_sentence_length,    vocabulary_diversity
-raw_corpus,     1300635,               248846,      1067,               37348,          3.8001012674505517,     233.2202436738519,      0.15008479139708897
-cleaned_corpus, 1083083,               208290,      1,                  34625,          4.0405156272504685,     208290.0,               0.16623457679197273
