@@ -1,0 +1,6 @@
+metric,                 raw_corpus,             cleaned_corpus,         change_percent
+Total Words,            248846.0,               208290.0,               -16.297629859431133
+Unique Words,           37348.0,                34625.0,                -7.290885723465782
+Vocabulary Diversity,   0.15008479139708897,    0.16623457679197273,    10.760440977763857
+Total Sentences,        1067.0,                 1.0,                    -99.90627928772258
+Average Sentence Length,233.2202436738519,      208290.0,               89210.42893998697
