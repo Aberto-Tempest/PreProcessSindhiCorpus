@@ -5,7 +5,7 @@ Sindhi Text Preprocessing Script
 This script cleans and preprocesses Sindhi text for NLP tasks.
 
 It:
-✅ Removes punctuation and non-text symbols (while preserving Sindhi script)
+✅ Removes punctuation, numbers, and non-text symbols (while preserving Sindhi script)
 ✅ Normalizes Unicode (NFC form) to keep the script jointed
 ✅ Removes extra whitespace
 ✅ Splits text into readable lines or sentences
@@ -40,10 +40,13 @@ with open(INPUT_FILE, "r", encoding="utf-8") as f:
 text = unicodedata.normalize("NFC", text)
 
 # === Step 3: Remove unwanted characters ===
-# Keep Sindhi characters, Arabic script, digits, spaces, and common punctuation
+# ⛔️ Updated: Removed all digits (Western 0–9 and Arabic-Indic ٠–٩)
+# Keep only Sindhi (Arabic-based) script, spaces, and Sindhi punctuation marks
 # Unicode blocks: Arabic \u0600-\u06FF, Arabic Extended-A \u0750-\u077F, Extended-B \u08A0-\u08FF
-allowed_pattern = r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF0-9\s۔؟]"
+# Removed digits 0–9 (\u0030-\u0039) and Arabic-Indic digits (\u0660-\u0669)
+allowed_pattern = r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\s۔؟]"
 
+# Replace disallowed characters with a space
 clean_text = "".join(ch if re.match(allowed_pattern, ch) else " " for ch in text)
 
 # === Step 4: Normalize whitespace ===
