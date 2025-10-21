@@ -53,11 +53,29 @@ clean_text = "".join(ch if re.match(allowed_pattern, ch) else " " for ch in text
 clean_text = re.sub(r"\s+", " ", clean_text).strip()
 
 # === Step 5: Split text into sentences ===
-# Sindhi sentences often end with ۔ or ؟
+# First split by Sindhi punctuation marks
 sentences = re.split(r"[۔؟!]", clean_text)
 sentences = [s.strip() for s in sentences if s.strip()]
 
-# === Step 6: Load stopwords efficiently using a set ===
+# === Step 6: Further split long sentences by spaces ===
+def split_long_sentences(sentences, max_words=15):
+    """Split sentences that are too long into smaller chunks"""
+    split_sentences = []
+    for sentence in sentences:
+        words = sentence.split()
+        if len(words) <= max_words:
+            split_sentences.append(sentence)
+        else:
+            # Split into chunks of max_words
+            for i in range(0, len(words), max_words):
+                chunk = " ".join(words[i:i + max_words])
+                split_sentences.append(chunk)
+    return split_sentences
+
+# Apply sentence splitting
+processed_sentences = split_long_sentences(sentences, max_words=10)  # Adjust max_words as needed
+
+# === Step 7: Load stopwords efficiently using a set ===
 # (Set lookup is O(1) — much faster than list)
 with open(STOPWORDS_FILE, "r", encoding="utf-8") as f:
     stopwords = set(line.strip() for line in f if line.strip())
@@ -68,13 +86,18 @@ def remove_stopwords(sentence):
     filtered = [w for w in words if w not in stopwords]
     return " ".join(filtered)
 
-# === Step 7: Apply stopword removal ===
-processed_sentences = [remove_stopwords(s) for s in sentences]
+# === Step 8: Apply stopword removal ===
+processed_sentences = [remove_stopwords(s) for s in processed_sentences]
 
-# === Step 8: Write cleaned text to output file ===
+# Remove any empty sentences after stopword removal
+processed_sentences = [s for s in processed_sentences if s.strip()]
+
+# === Step 9: Write cleaned text to output file ===
 with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
     for line in processed_sentences:
         f.write(line + "\n")
 
 print("✅ Preprocessing complete!")
+print(f"Original sentences: {len(sentences)}")
+print(f"After splitting: {len(processed_sentences)}")
 print(f"Cleaned corpus saved at: {OUTPUT_FILE}")
