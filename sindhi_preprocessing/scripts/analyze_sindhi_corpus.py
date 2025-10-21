@@ -1,125 +1,210 @@
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """
-Sindhi Corpus Analysis Script
------------------------------
-Performs analysis and visualization on both raw and cleaned Sindhi text corpora.
+analyze_sindhi_corpus.py
 
-Features:
-✅ Token and sentence statistics
-✅ Word frequency distribution
-✅ Word cloud visualization
-✅ Pre vs Post preprocessing comparison
+Generate corpus statistics, word-frequency CSV, wordcloud, and frequency distribution plot
+for Sindhi corpora (raw_corpus.txt and cleaned_corpus.txt).
 
-Run:
-    python3 scripts/analyze_sindhi_corpus.py
+Expect input files at: ../data/raw_corpus.txt and ../data/cleaned_corpus.txt
+Outputs written to: ../processed/analysis_outputs/
+
+Usage:
+    python scripts/analyze_sindhi_corpus.py --data-dir ./data --out-dir ./processed/analysis_outputs --font-path /path/to/NotoSansArabic-Regular.ttf
+
+The script is Unicode-aware and uses a conservative Arabic/Sindhi-range regex to extract words,
+thereby preserving cursive joins and avoiding splitting by naive char indices.
 """
 
+from __future__ import annotations
+import argparse
+import csv
 import os
-import re
+import sys
 import unicodedata
+import re
 from collections import Counter
+from dataclasses import dataclass, asdict
+from typing import List, Tuple, Dict
+
 import matplotlib.pyplot as plt
 from wordcloud import WordCloud
 
+# -----------------------------
+# Regex and utility definitions
+# -----------------------------
+# Match runs of characters from Arabic / Sindhi Unicode ranges listed in the prompt
+ARABIC_SINDHI_RE = re.compile(r"[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]+")
 
-# === Step 1: File paths ===
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, "data")
+# Sentence splitter (used only for optional raw analysis if sentences are present)
+SENTENCE_SPLIT_RE = re.compile(r"[۔؟!?]+")
 
-RAW_FILE = os.path.join(DATA_DIR, "raw_corpus.txt")
-CLEANED_FILE = os.path.join(DATA_DIR, "cleaned_corpus.txt")
+@dataclass
+class CorpusStats:
+    line_count: int
+    word_count: int
+    unique_word_count: int
+    avg_word_length: float
 
-# === Step 2: Load text files safely (UTF-8 + NFC normalization) ===
-def load_text(path):
-    """Load UTF-8 text and normalize to NFC form to preserve Sindhi script joining."""
+# -----------------------------
+# Core functions
+# -----------------------------
+
+def read_text_file(path: str) -> str:
+    """Read a UTF-8 text file and return normalized (NFC) text."""
     with open(path, "r", encoding="utf-8") as f:
-        text = f.read()
-    return unicodedata.normalize("NFC", text)
+        raw = f.read()
+    return unicodedata.normalize("NFC", raw)
 
-raw_text = load_text(RAW_FILE)
-cleaned_text = load_text(CLEANED_FILE)
 
-# === Step 3: Tokenization and sentence splitting ===
-# Sindhi uses "۔" (full stop) and "؟" (question mark) for sentence boundaries
-def split_sentences(text):
-    return [s.strip() for s in re.split(r"[۔؟!]", text) if s.strip()]
+def extract_words(text: str) -> List[str]:
+    """Extract words that belong to Sindhi/Arabic Unicode ranges.
 
-def tokenize(text):
-    """Tokenize Sindhi text without breaking script joins (split by whitespace)."""
-    return [w for w in text.split() if w.strip()]
+    This avoids splitting joined glyphs and is robust across whitespace
+    and punctuation variations.
+    """
+    # Find all matches of Arabic/Sindhi runs and return them (lowercasing is not applied because
+    # Arabic-script languages don't have case distinctions like Latin scripts).
+    return ARABIC_SINDHI_RE.findall(text)
 
-raw_sentences = split_sentences(raw_text)
-cleaned_sentences = split_sentences(cleaned_text)
 
-raw_tokens = tokenize(raw_text)
-cleaned_tokens = tokenize(cleaned_text)
+def compute_stats_from_text(text: str) -> Tuple[CorpusStats, Counter]:
+    """Compute corpus statistics and word frequency counter from raw text."""
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    line_count = len(lines)
 
-# === Step 4: Compute statistics ===
-def corpus_stats(name, sentences, tokens):
-    print(f"\n📊 {name} Corpus Statistics:")
-    print(f"  • Sentences: {len(sentences)}")
-    print(f"  • Tokens: {len(tokens)}")
-    avg_len = len(tokens) / max(len(sentences), 1)
-    print(f"  • Avg. Tokens per Sentence: {avg_len:.2f}")
+    words = extract_words(text)
+    word_count = len(words)
+    freq = Counter(words)
 
-corpus_stats("Raw", raw_sentences, raw_tokens)
-corpus_stats("Cleaned", cleaned_sentences, cleaned_tokens)
+    unique_word_count = len(freq)
+    avg_word_length = (sum(len(w) for w in words) / word_count) if word_count else 0.0
 
-# === Step 5: Frequency Distribution ===
-def get_freq(tokens):
-    return Counter(tokens)
+    stats = CorpusStats(
+        line_count=line_count,
+        word_count=word_count,
+        unique_word_count=unique_word_count,
+        avg_word_length=round(avg_word_length, 3),
+    )
+    return stats, freq
 
-raw_freq = get_freq(raw_tokens)
-cleaned_freq = get_freq(cleaned_tokens)
 
-# === Step 6: Visualization: Word Frequency Bar Chart ===
-def plot_top_words(freq, title, top_n=20):
-    """Plot top N most frequent Sindhi words using Matplotlib."""
-    common = freq.most_common(top_n)
-    words, counts = zip(*common)
-    plt.figure(figsize=(10, 6))
-    plt.barh(words, counts)
-    plt.gca().invert_yaxis()
-    plt.title(title, fontsize=14)
-    plt.xlabel("Frequency")
-    plt.ylabel("Word")
-    plt.tight_layout()
-    plt.show()
+def save_word_frequency_csv(freq: Counter, out_path: str, top_n: int | None = None) -> None:
+    """Save word frequency counts to CSV with columns: word, count, rank."""
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    items = freq.most_common(top_n)
+    with open(out_path, "w", encoding="utf-8", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["rank", "word", "count"])
+        for i, (w, c) in enumerate(items, start=1):
+            writer.writerow([i, w, c])
 
-plot_top_words(cleaned_freq, "Top 20 Most Frequent Words (Cleaned Corpus)")
 
-# === Step 7: Word Cloud Visualization ===
-def generate_wordcloud(freq):
-    """Generate a Sindhi word cloud visualization."""
-    wc = WordCloud(
-        font_path="/usr/share/fonts/truetype/noto/NotoNastaliqUrdu-Regular.ttf",  # RTL-safe font
-        width=800,
-        height=400,
-        background_color="white",
-        colormap="plasma"
-    ).generate_from_frequencies(freq)
-    plt.figure(figsize=(10, 6))
-    plt.imshow(wc, interpolation="bilinear")
-    plt.axis("off")
-    plt.title("Sindhi Word Cloud", fontsize=16)
-    plt.show()
+def save_stats_csv(stats: CorpusStats, out_path: str) -> None:
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    with open(out_path, "w", encoding="utf-8", newline="") as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(["metric", "value"])
+        for k, v in asdict(stats).items():
+            writer.writerow([k, v])
 
-generate_wordcloud(cleaned_freq)
 
-# === Step 8: Distribution Plot ===
-def plot_word_distribution(freq, title="Word Frequency Distribution"):
-    """Plot a simple frequency distribution curve."""
-    counts = list(freq.values())
-    counts.sort(reverse=True)
-    plt.figure(figsize=(8, 5))
-    plt.plot(counts)
-    plt.title(title)
-    plt.xlabel("Word Rank")
+def plot_top_frequency(freq: Counter, out_path: str, top_n: int = 30) -> None:
+    """Plot the top_n most frequent words as a bar chart and save as PNG."""
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    most = freq.most_common(top_n)
+    if not most:
+        print("[warn] no tokens to plot for frequency distribution.")
+        return
+
+    words, counts = zip(*most)
+
+    plt.figure(figsize=(12, 6))
+    plt.bar(range(len(words)), counts)
+    plt.xticks(range(len(words)), words, rotation=45, ha="right")
+    plt.xlabel("Words")
     plt.ylabel("Frequency")
-    plt.grid(alpha=0.3)
+    plt.title(f"Top {len(words)} word frequency distribution")
     plt.tight_layout()
-    plt.show()
+    plt.savefig(out_path, dpi=300)
+    plt.close()
 
-plot_word_distribution(cleaned_freq)
 
-print("\n✅ Analysis complete! Visualizations displayed successfully.")
+def generate_wordcloud(freq: Counter, out_path: str, font_path: str | None = None, max_words: int = 200) -> None:
+    """Create and save a word cloud image. A font_path is strongly recommended for Sindhi/Arabic script."""
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+    if not freq:
+        print("[warn] empty frequency; skipping wordcloud generation.")
+        return
+
+    wc = WordCloud(
+        width=1600,
+        height=900,
+        max_words=max_words,
+        background_color="white",
+        font_path=font_path,
+        collocations=False,
+    )
+    # WordCloud expects a dict of word->count
+    wc.generate_from_frequencies(dict(freq))
+    wc.to_file(out_path)
+
+# -----------------------------
+# Main CLI
+# -----------------------------
+
+def main(argv: List[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Analyze Sindhi corpus: stats, freq CSV, plots, wordcloud")
+    parser.add_argument("--data-dir", default="data", help="Directory containing raw_corpus.txt and cleaned_corpus.txt")
+    parser.add_argument("--out-dir", default="processed/analysis_outputs", help="Output directory for analysis artifacts")
+    parser.add_argument("--font-path", default=None, help="Optional path to a TTF font that supports Arabic/Sindhi (recommended)")
+    parser.add_argument("--top-n-words", type=int, default=200, help="How many words to include in wordcloud and CSV (default: 200)")
+    parser.add_argument("--plot-top-n", type=int, default=30, help="Top N words to plot in the bar chart (default: 30)")
+    args = parser.parse_args(argv)
+
+    data_dir = args.data_dir
+    out_dir = args.out_dir
+    font_path = args.font_path
+
+    raw_path = os.path.join(data_dir, "raw_corpus.txt")
+    cleaned_path = os.path.join(data_dir, "cleaned_corpus.txt")
+
+    if not os.path.exists(raw_path):
+        print(f"[error] missing raw file: {raw_path}")
+        return 2
+    if not os.path.exists(cleaned_path):
+        print(f"[error] missing cleaned file: {cleaned_path}")
+        return 2
+
+    print("Reading and analyzing raw corpus...")
+    raw_text = read_text_file(raw_path)
+    raw_stats, raw_freq = compute_stats_from_text(raw_text)
+
+    print("Reading and analyzing cleaned corpus...")
+    cleaned_text = read_text_file(cleaned_path)
+    cleaned_stats, cleaned_freq = compute_stats_from_text(cleaned_text)
+
+    # Save stats
+    save_stats_csv(raw_stats, os.path.join(out_dir, "corpus_statistics_before.csv"))
+    save_stats_csv(cleaned_stats, os.path.join(out_dir, "corpus_statistics_after.csv"))
+
+    # Save frequency CSVs (top N)
+    save_word_frequency_csv(cleaned_freq, os.path.join(out_dir, "word_frequency.csv"), top_n=args.top_n_words)
+
+    # Create plots and wordcloud
+    print("Generating frequency distribution plot and wordcloud (may warn if font missing)...")
+    try:
+        plot_top_frequency(cleaned_freq, os.path.join(out_dir, "frequency_distribution.png"), top_n=args.plot_top_n)
+    except Exception as e:
+        print(f"[error] failed to create frequency distribution plot: {e}")
+
+    try:
+        generate_wordcloud(cleaned_freq, os.path.join(out_dir, "wordcloud.png"), font_path=font_path, max_words=args.top_n_words)
+    except Exception as e:
+        print(f"[error] failed to create wordcloud: {e}")
+
+    print(f"Analysis complete. Outputs in: {out_dir}")
+    print("Important: for visually correct Sindhi/Arabic rendering, supply --font-path to a Nastaliq or Arabic font (eg. NotoSansArabic or NotoNastaliqUrdu).")
+    return 0
+
+if __name__ == "__main__":
+    raise SystemExit(main())
